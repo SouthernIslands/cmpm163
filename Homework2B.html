@@ -43,13 +43,92 @@
 	<script src="./js/dat.gui.min.js"></script>
 	<script src="./js/TrackballControls.js"></script>
 	<script src="./js/GPUParticleSystem.js"></script>
+	<script src="js/OrbitControls.js"></script>
+	
+	<script type="x-shader/x-vertex" id="vertexshader">
+
+		precision highp float;
+
+		uniform float amplitude;
+		attribute float size;
+		attribute vec3 customColor;
+		attribute float spriteNum;
+
+		varying vec3 vColor;
+		varying float vWhichSprite;
+
+		void main() {
+
+			vColor = customColor;
+
+			vWhichSprite = spriteNum;
+
+			vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+
+			gl_PointSize = size * (30.0 / -mvPosition.z );
+
+			gl_Position = projectionMatrix * mvPosition;
+
+		}
+
+	</script>
+
+	<script type="x-shader/x-fragment" id="fragmentshader">
+
+		precision highp float;
+		
+		uniform vec3 color;
+		uniform sampler2D texture1;
+		uniform sampler2D texture2;
+		uniform sampler2D texture3;
+		uniform sampler2D texture4;
+		uniform sampler2D texture5;
+
+		varying vec3 vColor;
+		varying float vWhichSprite;
+
+		void main() {
+
+
+			vec4 tCol; 
+
+			if (vWhichSprite == 0.0) {
+				tCol = texture2D( texture1, gl_PointCoord );
+			} else if (vWhichSprite == 1.0) {
+				tCol = texture2D( texture2, gl_PointCoord );
+			} else if (vWhichSprite == 2.0) {
+				tCol = texture2D( texture3, gl_PointCoord );
+			} else if (vWhichSprite == 3.0) {
+				tCol = texture2D( texture4, gl_PointCoord );
+			} else  {
+				tCol = texture2D( texture5, gl_PointCoord );
+			}
+
+			gl_FragColor = vec4( color * vColor, 1.0 );
+			gl_FragColor = gl_FragColor * tCol;
+
+		}
+
+	</script>
 
 	<script>
 		var camera, tick = 0,
 			scene, renderer, clock = new THREE.Clock(),
 			controls, container, gui = new dat.GUI( { width: 350 } ),
 			options, spawnerOptions, particleSystem;
+		
+			var boxOfPoints;
 
+			var WIDTH = window.innerWidth;
+			var HEIGHT = window.innerHeight;
+
+			var textureLoader = new THREE.TextureLoader();
+
+			var sprite0 = textureLoader.load( "snowflake1.png" );
+			var sprite1 = textureLoader.load( "snowflake2.png" );
+			var sprite2 = textureLoader.load( "snowflake3.png" );
+			var sprite3 = textureLoader.load( "snowflake4.png" );
+			var sprite4 = textureLoader.load( "snowflake5.png" );
 		init();
 		animate();
 
@@ -60,17 +139,17 @@
 			container = document.getElementById( 'container' );
 
 			camera = new THREE.PerspectiveCamera( 28, window.innerWidth / window.innerHeight, 1, 10000 );
-			camera.position.z = 100;
+			camera.position.z = 200;
 
 			scene = new THREE.Scene();
-
+			var textureLoader = new THREE.TextureLoader();
 			// The GPU Particle system extends THREE.Object3D, and so you can use it
 			// as you would any other scene graph component.	Particle positions will be
 			// relative to the position of the particle system, but you will probably only need one
 			// system for your whole scene
 
 			particleSystem = new THREE.GPUParticleSystem( {
-				maxParticles: 25000
+				maxParticles: 25000,
 			} );
 
 			scene.add( particleSystem );
@@ -81,19 +160,19 @@
 				position: new THREE.Vector3(),
 				positionRandomness: .3,
 				velocity: new THREE.Vector3(),
-				velocityRandomness: .5,
+				velocityRandomness: .2,
 				color:0xaa88ff,
 				colorRandomness: .2,
-				turbulence: .5,
+				turbulence: .0,
 				lifetime: 2,
 				size: 5,
 				sizeRandomness: 1
 			};
 
 			spawnerOptions = {
-				spawnRate: 15000,
-				horizontalSpeed: 1.5,
-				verticalSpeed: 1.33,
+				spawnRate: 20000,
+				horizontalSpeed: 0.3,
+				verticalSpeed: 0.11,
 				timeScale: 1
 			};
 
@@ -111,12 +190,73 @@
 			gui.add( spawnerOptions, "timeScale", -1, 1 );
 
 			//
+			//initialize point attributes
+
+			var amount = 100000;
+			var radius = 200;
+
+			var positions = new Float32Array( amount * 3 );
+			var colors = new Float32Array( amount * 3 );
+			var sizes = new Float32Array( amount );
+			var spriteNums = new Float32Array( amount );
+
+			var vertex = new THREE.Vector3();
+			var color = new THREE.Color( 0xffffff );
+
+			for ( var i = 0; i < amount; i ++ ) {
+
+				vertex.x = ( Math.random() * 2 - 1 ) * radius;
+				vertex.y = ( Math.random() * 2 - 1 ) * radius;
+				vertex.z = ( Math.random() * 2 - 1 ) * radius;
+				vertex.toArray( positions, i * 3 );
+
+				color.setHSL(1.0, 0.2, 0.5);
+
+				color.toArray( colors, i * 3 );
+
+				sizes[ i ] = 40;
+				spriteNums[ i ] = Math.floor(Math.random() * 5.0);
+				
+
+			}
+
+			var geometry = new THREE.BufferGeometry();
+			geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+			geometry.addAttribute( 'customColor', new THREE.BufferAttribute( colors, 3 ) );
+			geometry.addAttribute( 'size', new THREE.BufferAttribute( sizes, 1 ) );
+			geometry.addAttribute( 'spriteNum', new THREE.BufferAttribute( spriteNums, 1 ) );
+
+			//
+
+			var material = new THREE.ShaderMaterial( {
+
+				uniforms: {
+					color:     { type: "v3", value: new THREE.Color( 0xffffff ) },
+					texture1:  { type: "t", value: sprite0 },
+					texture2:  { type: "t", value: sprite1 },
+					texture3:  { type: "t", value: sprite2 },
+					texture4:  { type: "t", value: sprite3 },
+					texture5:  { type: "t", value: sprite4 }
+				},
+				vertexShader:   document.getElementById( 'vertexshader' ).textContent,
+				fragmentShader: document.getElementById( 'fragmentshader' ).textContent,
+
+				blending:       THREE.AdditiveBlending,
+				depthTest:      false,
+				transparent:    true
+
+			});
+
+			//
+
+			boxOfPoints = new THREE.Points( geometry, material );
+			scene.add( boxOfPoints );
 
 			//
 
 			renderer = new THREE.WebGLRenderer();
 			renderer.setPixelRatio( window.devicePixelRatio );
-			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.setSize(  WIDTH, HEIGHT );
 			container.appendChild( renderer.domElement );
 
 			//
@@ -154,9 +294,9 @@
 
 			if ( delta > 0 ) {
 
-				options.position.x = Math.sin( tick * spawnerOptions.horizontalSpeed ) * 20;
-				options.position.y = Math.sin( tick * spawnerOptions.verticalSpeed ) * 10;
-				options.position.z = Math.sin( tick * spawnerOptions.horizontalSpeed + spawnerOptions.verticalSpeed ) * 5;
+				options.position.x = Math.sin( tick * spawnerOptions.horizontalSpeed ) * 200;
+				options.position.y = Math.sin( tick * spawnerOptions.verticalSpeed ) * 100;
+				options.position.z = Math.sin( tick * spawnerOptions.horizontalSpeed + spawnerOptions.verticalSpeed ) * 10;
 
 				for ( var x = 0; x < spawnerOptions.spawnRate * delta; x++ ) {
 
@@ -176,6 +316,14 @@
 		}
 
 		function render() {
+			var time = Date.now() * 0.02;
+
+			//boxOfPoints.rotation.z = 0.01 * time;
+
+			var geometry = boxOfPoints.geometry;
+			var attributes = geometry.attributes;
+			attributes.size.needsUpdate = true;
+			
 
 			renderer.render( scene, camera );
 
