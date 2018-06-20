@@ -129,7 +129,7 @@ function init() {
   var channelTex = new THREE.TextureLoader().load( 'tex.png' );
   channelTex.wrapS = THREE.RepeatWrapping;
   channelTex.wrapT = THREE.RepeatWrapping;
-  channelTex.repeat.set( 4, 4 );
+  channelTex.repeat.set( 2, 2);
   var geometry = new THREE.PlaneBufferGeometry(window.innerWidth,  window.innerHeight);
 
   uniforms = {
